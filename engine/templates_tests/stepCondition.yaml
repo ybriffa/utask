@@ -40,7 +40,7 @@ steps:
                     expected: '[a-z\.]+@example\.com$'
               then:
                   this: REGEXP_MATCH
-              message: email address belongs to example.com 
+              message: email address belongs to example.com
     stepThree:
         dependencies: [stepTwo:ANY]
         description: multiple conditions changing state
@@ -76,3 +76,31 @@ steps:
               then:
                   this: FOO
               message: changed state matched correctly
+    stepFour:
+        dependencies: [stepThree:ANY]
+        description: a check against a list of acceptable values
+        custom_states: [LIST_MATCH,LIST_NOMATCH]
+        action:
+            type: echo
+            configuration:
+                output:
+                    items: 'foo,bar'
+        conditions:
+            - type: check
+              if:
+                  - expected: foo
+                    operator: IN
+                    value: '{{.step.this.output.items}}'
+                    list_separator: ","
+              then:
+                  this: LIST_MATCH
+              message: List contains matching value
+            - type: check
+              if:
+                  - expected: baz
+                    operator: NOTIN
+                    value: '{{.step.this.output.items}}'
+                    list_separator: ","
+              then:
+                  this: LIST_NOMATCH
+              message: List doesn't contains matching value
