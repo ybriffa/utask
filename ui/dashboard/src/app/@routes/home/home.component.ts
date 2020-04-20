@@ -20,12 +20,15 @@ export class SearchTask {
   last?: string;
   type?: string;
   state?: string;
+  tag?: string[];
 }
 
 @Component({
   templateUrl: './home.html',
+  styleUrls: ['./home.sass'],
 })
 export class HomeComponent implements OnInit, OnDestroy {
+  tags: string[] = [];
   loaders: { [key: string]: boolean } = {};
   errors: { [key: string]: any } = {};
   meta: MetaUtask = null;
@@ -48,13 +51,18 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+    this.tags = this.taskService.tagsRaw;
+    this.taskService.tags.asObservable().subscribe((tags: string[]) => {
+      this.tags = tags;
+    });
+
     this.meta = this.route.parent.snapshot.data.meta as MetaUtask;
     this.route.queryParams.subscribe(params => {
       this.pagination = this.queryToSearchTask(params);
       this.loaders.tasks = true;
-      this.loadTasks().then((tasks) => {
+      this.loadTasks().then((tasks: any[]) => {
         this.errors.tasks = null;
-        this.tasks = tasks;
+        this.tasks = tasks.map(t => this.taskService.registerTags(t));
         this.generateProgressBars(this.tasks);
         this.hasMore = (tasks as any[]).length === this.pagination.page_size;
       }).catch((err) => {
@@ -93,6 +101,11 @@ export class HomeComponent implements OnInit, OnDestroy {
         });
       }
     }, 15000, false);
+  }
+
+  inputTagsChanged(text: string) {
+    this.pagination.tag = _.compact(text.split(' '));
+    this.search();
   }
 
   selectAll() {
@@ -283,7 +296,10 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   queryToSearchTask(p?: any): SearchTask {
-    const params = p || this.router.routerState.snapshot.root.queryParams;
+    const params = _.clone(p || this.router.routerState.snapshot.root.queryParams);
+    if (params.tag && _.isString(params.tag)) {
+      params.tag = [params.tag];
+    }
     const item = new SearchTask();
     if (params.itemPerPage && _.isNumber(+params.itemPerPage) && +params.itemPerPage <= 1000 && +params.itemPerPage >= 10) {
       item.page_size = +params.itemPerPage;
@@ -291,9 +307,10 @@ export class HomeComponent implements OnInit, OnDestroy {
       item.page_size = 20;
     }
     const defaultType = this.meta.user_is_admin ? 'all' : 'own';
-    item.type = params.type ? params.type : defaultType;
+    item.type = params.type || defaultType;
     item.last = '';
-    item.state = params.state ? params.state : '';
+    item.state = params.state || '';
+    item.tag = params.tag || [];
     return item;
   }
 

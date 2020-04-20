@@ -1,4 +1,6 @@
 export const environment = {
   production: true,
   apiBaseUrl: '<%= PREFIX_API_BASE_URL %>',
+  localStorage: '<%= PREFIX_LOCALSTORAGE %>',
+  sentry: '<%= SENTRY_DSN %>',
 };

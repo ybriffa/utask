@@ -1,5 +1,6 @@
 export default class Task {
     batch: string;
+    tags: { [key: string]: string };
     comments: any[];
     created: Date;
     errors: any[];

@@ -1,13 +1,10 @@
 <div>
-  <loader *ngIf="loaders.tasks"></loader>
-  <error-message [data]="errors.tasks" *ngIf="errors.tasks && !loaders.tasks"></error-message>
-  <div class="main" *ngIf="!loaders.tasks && !errors.tasks">
+  <div class="main">
     <header>
       <h1>
         Tasks -
         <div class="form-inline" style="display:inline-block;">
-          <select class="form-control" id="filter_type" name="filter_type" [(ngModel)]="pagination.type"
-            (change)="search();">
+          <select class="form-control" id="filter_type" name="filter_type" [(ngModel)]="pagination.type" (change)="search();">
             <option value="all" *ngIf="meta.user_is_admin">All</option>
             <option value="own">As a requester</option>
             <option value="resolvable">As a resolver</option>
@@ -23,10 +20,17 @@
             <option value="TODO">TODO</option>
             <option value="WONTFIX">WONTFIX</option>
           </select>
+          &nbsp;
+          <app-input-tags class="form-control" (update)="inputTagsChanged($event);" [value]="pagination.tag"
+            [placeholder]="'Add tags'"></app-input-tags>
         </div>
       </h1>
     </header>
-    <section>
+
+    <loader *ngIf="loaders.tasks"></loader>
+    <error-message [data]="errors.tasks" *ngIf="errors.tasks && !loaders.tasks"></error-message>
+
+    <section *ngIf="!loaders.tasks && !errors.tasks">
       <div class="utask_bloc">
         <header>
           <div class="utask_bloc_header_title" style="width:100%">
