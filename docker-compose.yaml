@@ -16,6 +16,7 @@ services:
     volumes:
       - "./templates:/app/templates:ro"
       - "./scripts:/app/scripts:ro"
+      - "./services:/app/services:ro"
     depends_on:
       - db
   db:

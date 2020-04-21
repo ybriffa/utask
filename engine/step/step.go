@@ -14,6 +14,7 @@ import (
 	"github.com/ovh/utask"
 	"github.com/ovh/utask/engine/values"
 	"github.com/ovh/utask/pkg/jsonschema"
+	"github.com/ovh/utask/pkg/services"
 	"github.com/ovh/utask/pkg/utils"
 )
 
@@ -169,36 +170,6 @@ func Run(st *Step, baseConfig map[string]json.RawMessage, values *values.Values,
 		return
 	}
 
-	var baseOutput map[string]interface{}
-
-	if len(st.Action.BaseOutput) > 0 {
-		base, err := rawResolveObject(values, st.Action.BaseOutput, st.Item, st.Name)
-		if err != nil {
-			st.State = StateFatalError
-			st.Error = errors.Annotate(err, "failed to template base output").Error()
-			go noopStep(st, stepChan)
-			return
-		}
-		if base != nil {
-			var ok bool
-			baseOutput, ok = base.(map[string]interface{})
-			if !ok {
-				st.State = StateFatalError
-				st.Error = errors.Annotate(errors.New("Base output not a map"), "failed to template base output").Error()
-				go noopStep(st, stepChan)
-				return
-			}
-		}
-	}
-
-	config, err := resolveObject(values, st.Action.Configuration, st.Item, st.Name)
-	if err != nil {
-		st.State = StateFatalError
-		st.Error = errors.Annotate(err, "failed to template configuration").Error()
-		go noopStep(st, stepChan)
-		return
-	}
-
 	var baseCfgRaw json.RawMessage
 
 	if st.Action.BaseConfiguration != "" {
@@ -219,12 +190,58 @@ func Run(st *Step, baseConfig map[string]json.RawMessage, values *values.Values,
 		baseCfgRaw = resolvedBase
 	}
 
-	runner, err := getRunner(st.Action.Type)
-	if err != nil {
-		st.State = StateFatalError
-		st.Error = err.Error()
-		go noopStep(st, stepChan)
-		return
+	var baseOutputs []map[string]interface{}
+	var runner Runner
+	var err error
+	config := st.Action.Configuration
+	runnerType := st.Action.Type
+
+	for { // until we break because no more services
+		if len(st.Action.BaseOutput) > 0 {
+			base, err := rawResolveObject(values, st.Action.BaseOutput, st.Item, st.Name)
+			if err != nil {
+				st.State = StateFatalError
+				st.Error = errors.Annotate(err, "failed to template base output").Error()
+				go noopStep(st, stepChan)
+				return
+			}
+			if base != nil {
+				var ok bool
+				baseOutput, ok := base.(map[string]interface{})
+				if !ok {
+					st.State = StateFatalError
+					st.Error = errors.Annotate(errors.New("Base output not a map"), "failed to template base output").Error()
+					go noopStep(st, stepChan)
+					return
+				}
+				// prepend the base outputs
+				baseOutputs = append([]map[string]interface{}{baseOutput}, baseOutputs...)
+			}
+		}
+
+		config, err = resolveObject(values, config, st.Item, st.Name)
+		if err != nil {
+			st.State = StateFatalError
+			st.Error = errors.Annotate(err, "failed to template configuration").Error()
+			go noopStep(st, stepChan)
+			return
+		}
+
+		runner, err = getRunner(runnerType)
+		if err != nil {
+			st.State = StateFatalError
+			st.Error = err.Error()
+			go noopStep(st, stepChan)
+			return
+		}
+
+		// Check if we have a service as runner or not. If not, we do not need to go further in the resolution
+		serviceRunner, ok := runner.(*services.Service)
+		if !ok {
+			break
+		}
+		config = serviceRunner.Action.Configuration
+		runnerType = serviceRunner.Action.Type
 	}
 
 	ctx := runner.Context(st.Name)
@@ -263,14 +280,14 @@ func Run(st *Step, baseConfig map[string]json.RawMessage, values *values.Values,
 			st.State = StateToRetry
 		default:
 			st.Output, st.Metadata, st.Tags, err = runner.Exec(st.Name, baseCfgRaw, config, ctx)
-			if baseOutput != nil {
-				if st.Output != nil {
+			if len(baseOutputs) > 0 && st.Output != nil {
+				for _, baseOutput := range baseOutputs {
 					marshaled, err := utils.JSONMarshal(st.Output)
 					if err == nil {
 						_ = utils.JSONnumberUnmarshal(bytes.NewReader(marshaled), &baseOutput)
 					}
+					st.Output = baseOutput
 				}
-				st.Output = baseOutput
 			}
 			if err != nil {
 				if errors.IsBadRequest(err) {
